@@ -1,5 +1,6 @@
 {
   "asistencia_minima": 75,
+  "link_asistencia": "https://campus.ejemplo.edu/asistencia",
   "semestre": {
     "inicio": "2026-08-10",
     "fin": "2026-12-04",
@@ -23,7 +24,6 @@
     {
       "nombre": "Programación",
       "aula": "Laboratorio 3",
-      "link": "https://campus.ejemplo.edu/asistencia/programacion",
       "horarios": [
         { "dia": "martes", "inicio": "10:15", "fin": "11:45" },
         { "dia": "jueves", "inicio": "10:15", "fin": "11:45" }

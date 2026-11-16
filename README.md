@@ -25,6 +25,7 @@ cp config.ejemplo.json config.json   # luego edítalo con tus materias
 ```jsonc
 {
   "asistencia_minima": 75,               // % mínimo por defecto
+  "link_asistencia": "https://...",      // la página donde marcas (la misma para todas las materias)
   "semestre": {
     "inicio": "2026-08-10",
     "fin": "2026-12-04",
@@ -40,7 +41,7 @@ cp config.ejemplo.json config.json   # luego edítalo con tus materias
       "nombre": "Cálculo II",
       "aula": "Edificio B - Sala 204",   // opcional
       "asistencia_minima": 80,           // opcional, sobrescribe el global
-      "link": "https://...",             // opcional: página para marcar asistencia
+      "link": "https://...",             // opcional: solo si esta materia se marca en otra página
       "clases_totales": 32,              // opcional: si no, se calcula con las fechas del semestre
       "tarde_cuenta_como": "presente",   // o "ausente"
       "horarios": [

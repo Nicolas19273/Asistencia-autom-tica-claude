@@ -64,7 +64,7 @@ class TestAsistencia(unittest.TestCase):
         self.assertEqual(ics.count("BEGIN:VEVENT"), 5)
         self.assertIn("TRIGGER:-PT10M", ics)
         self.assertEqual(ics.count("BEGIN:VALARM"), 10)
-        self.assertIn("URL:https://campus.ejemplo.edu/asistencia/programacion", ics)
+        self.assertIn("URL:https://campus.ejemplo.edu/asistencia", ics)
 
     def test_aviso_antes_de_clase(self):
         ahora = datetime(2026, 8, 11, 10, 8)  # martes, Programación 10:15

@@ -14,7 +14,8 @@
   * { box-sizing:border-box; }
   body { margin:0; font-family:system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--txt); padding:20px 16px 40px; }
   h1 { font-size:1.4rem; margin:0 0 4px; }
-  #fecha { color:var(--sub); margin:0 0 20px; }
+  #fecha { color:var(--sub); margin:0 0 8px; }
+  .ayuda { color:var(--sub); font-size:.9rem; margin:0 0 20px; line-height:1.4; }
   .clase { display:block; text-decoration:none; color:inherit; background:var(--card); border:1px solid var(--borde);
            border-radius:14px; padding:16px; margin-bottom:12px; }
   .clase.ahora { border:2px solid var(--ahora); }
@@ -32,6 +33,7 @@
 <body>
 <h1>Mi asistencia</h1>
 <p id="fecha"></p>
+<p class="ayuda">Toca <b>Marcar</b> y en la página pulsa el botón rojo de tu clase hasta que quede <b style="color:var(--ahora)">verde</b>.</p>
 <div id="hoy"></div>
 <h2>Todas las materias</h2>
 <div id="todas"></div>

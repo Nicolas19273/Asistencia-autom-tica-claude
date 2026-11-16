@@ -155,7 +155,7 @@ def cargar_config(ruta: Path) -> Config:
                 horarios=horarios,
                 asistencia_minima=float(m.get("asistencia_minima", datos.get("asistencia_minima", 75))),
                 clases_totales=m.get("clases_totales"),
-                link=m.get("link"),
+                link=m.get("link", datos.get("link_asistencia")),
                 aula=m.get("aula"),
                 tarde_cuenta_como=m.get("tarde_cuenta_como", "presente"),
             )
@@ -309,7 +309,7 @@ def generar_ics(config: Config, desde: date, hasta: date) -> str:
             hf, mf = parsear_hora(h.fin)
             inicio = datetime.combine(dia, datetime.min.time()).replace(hour=hi, minute=mi)
             fin = datetime.combine(dia, datetime.min.time()).replace(hour=hf, minute=mf)
-            descripcion = "Recuerda registrar tu asistencia."
+            descripcion = "Abre la página de asistencia y pulsa el botón de esta clase (rojo → verde)."
             if materia.link:
                 descripcion += f"\nLink: {materia.link}"
             lineas += [
@@ -469,13 +469,14 @@ def cmd_recordar(config: Config, args) -> None:
             for aviso in avisos_pendientes(config, datetime.now(), filas, enviados):
                 m, h = aviso.materia, aviso.horario
                 if aviso.tipo == "antes":
-                    notificar(m.nombre, f"Empieza a las {h.inicio}. ¡Marca tu asistencia!")
+                    notificar(m.nombre, f"Empieza a las {h.inicio}. Abre la página y pon en verde el botón de {m.nombre}.")
                     if m.link and config.abrir_link and not args.sin_link:
                         webbrowser.open(m.link)
                 else:
                     notificar(
-                        f"¿Marcaste en {m.nombre}?",
-                        f'No hay registro de hoy. Si fuiste, márcalo: python asistencia.py marcar "{m.nombre}"',
+                        f"¿Pusiste en verde {m.nombre}?",
+                        "Revisa que el botón de esta clase haya quedado verde en la página de asistencia. "
+                        f'Para anotarlo aquí: python asistencia.py marcar "{m.nombre}"',
                     )
                 enviados.add(aviso.clave)
                 _guardar_enviados(AVISOS_ENVIADOS, enviados)
@@ -508,7 +509,7 @@ def cmd_abrir(config: Config, args) -> None:
             raise SystemExit("Hoy no tienes clases.")
         materia = par[0]
     if not materia.link:
-        raise SystemExit(f"{materia.nombre} no tiene 'link' en config.json.")
+        raise SystemExit("Falta 'link_asistencia' en config.json (la página donde marcas asistencia).")
     print(f"Abriendo asistencia de {materia.nombre}: {materia.link}")
     webbrowser.open(materia.link)
 
