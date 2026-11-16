@@ -1,7 +1,7 @@
 import sys
 import tempfile
 import unittest
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -63,7 +63,32 @@ class TestAsistencia(unittest.TestCase):
         ics = a.generar_ics(self.config, date(2026, 8, 10), date(2026, 8, 16))
         self.assertEqual(ics.count("BEGIN:VEVENT"), 5)
         self.assertIn("TRIGGER:-PT10M", ics)
+        self.assertEqual(ics.count("BEGIN:VALARM"), 10)
         self.assertIn("URL:https://campus.ejemplo.edu/asistencia/programacion", ics)
+
+    def test_aviso_antes_de_clase(self):
+        ahora = datetime(2026, 8, 11, 10, 8)  # martes, Programación 10:15
+        avisos = a.avisos_pendientes(self.config, ahora, [], set())
+        self.assertEqual([(x.tipo, x.materia.nombre) for x in avisos], [("antes", "Programación")])
+        # no se repite si ya se envió
+        self.assertEqual(a.avisos_pendientes(self.config, ahora, [], {avisos[0].clave}), [])
+
+    def test_verificar_despues_si_no_registraste(self):
+        ahora = datetime(2026, 8, 11, 11, 55)  # 10 min después del fin
+        avisos = a.avisos_pendientes(self.config, ahora, [], set())
+        self.assertEqual([x.tipo for x in avisos], ["verificar"])
+        filas = [{"fecha": "2026-08-11", "materia": "Programación", "estado": "presente"}]
+        self.assertEqual(a.avisos_pendientes(self.config, ahora, filas, set()), [])
+
+    def test_clase_actual_o_siguiente(self):
+        m, _ = a.clase_actual_o_siguiente(self.config, datetime(2026, 8, 11, 9, 0))
+        self.assertEqual(m.nombre, "Programación")
+        self.assertIsNone(a.clase_actual_o_siguiente(self.config, datetime(2026, 8, 15, 9, 0)))  # sábado
+
+    def test_pagina(self):
+        html = a.generar_pagina(self.config)
+        self.assertIn("Programación", html)
+        self.assertNotIn("__DATOS__", html)
 
     def test_materia_inexistente(self):
         with self.assertRaises(SystemExit):

@@ -7,6 +7,8 @@ Uso rápido:
     python asistencia.py marcar "Cálculo" presente
     python asistencia.py resumen             # porcentajes y faltas que te quedan
     python asistencia.py recordar            # avisa antes de cada clase (y abre el link)
+    python asistencia.py abrir               # abre el link de asistencia de la clase actual
+    python asistencia.py pagina              # página con botones para el celular
     python asistencia.py exportar-ics        # calendario con alarmas para tu celular
 
 Solo usa la biblioteca estándar de Python 3.9+.
@@ -32,6 +34,7 @@ from pathlib import Path
 RAIZ = Path(__file__).resolve().parent
 CONFIG_POR_DEFECTO = RAIZ / "config.json"
 REGISTRO_POR_DEFECTO = RAIZ / "data" / "registro.csv"
+AVISOS_ENVIADOS = RAIZ / "data" / ".avisos_enviados"
 
 DIAS = ["lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo"]
 ESTADOS = ("presente", "ausente", "justificada", "tarde")
@@ -84,6 +87,7 @@ class Config:
     feriados: set[date] = field(default_factory=set)
     minutos_aviso: int = 10
     abrir_link: bool = True
+    minutos_despues: int | None = 5  # aviso "¿marcaste?" tras terminar la clase; None = desactivado
 
     def buscar_materia(self, nombre: str) -> Materia:
         objetivo = normalizar(nombre)
@@ -167,6 +171,7 @@ def cargar_config(ruta: Path) -> Config:
         feriados={date.fromisoformat(d) for d in sem.get("feriados", [])},
         minutos_aviso=int(recordatorios.get("minutos_antes", 10)),
         abrir_link=bool(recordatorios.get("abrir_link", True)),
+        minutos_despues=recordatorios.get("verificar_minutos_despues", 5),
     )
 
 
@@ -326,6 +331,11 @@ def generar_ics(config: Config, desde: date, hasta: date) -> str:
                 f"DESCRIPTION:{_escapar_ics(materia.nombre)} empieza pronto",
                 f"TRIGGER:-PT{config.minutos_aviso}M",
                 "END:VALARM",
+                "BEGIN:VALARM",
+                "ACTION:DISPLAY",
+                f"DESCRIPTION:Marca tu asistencia en {_escapar_ics(materia.nombre)}",
+                "TRIGGER:PT0M",
+                "END:VALARM",
                 "END:VEVENT",
             ]
         dia += timedelta(days=1)
@@ -394,28 +404,137 @@ def cmd_resumen(config: Config, args) -> None:
         print("\nTip: define 'semestre.inicio' y 'semestre.fin' (o 'clases_totales') para saber cuántas faltas te quedan.")
 
 
+@dataclass
+class Aviso:
+    tipo: str  # "antes" o "verificar"
+    materia: Materia
+    horario: Horario
+    clave: str
+
+
+VENTANA_VERIFICAR_MIN = 60
+
+
+def avisos_pendientes(config: Config, ahora: datetime, filas: list[dict], ya_enviados: set[str]) -> list[Aviso]:
+    """Calcula qué avisos tocan en este momento.
+
+    - "antes": la clase empieza dentro de `minutos_aviso` minutos.
+    - "verificar": la clase terminó hace `minutos_despues` minutos (hasta 1 h) y
+      no hay ningún registro de esa materia para hoy.
+    """
+    hoy = ahora.date()
+    registradas = {r["materia"] for r in filas if r["fecha"] == hoy.isoformat()}
+    avisos = []
+    for m, h in config.clases_de(hoy):
+        hi, mi = parsear_hora(h.inicio)
+        hf, mf = parsear_hora(h.fin)
+        inicio = datetime.combine(hoy, datetime.min.time()).replace(hour=hi, minute=mi)
+        fin = datetime.combine(hoy, datetime.min.time()).replace(hour=hf, minute=mf)
+
+        clave = f"antes|{m.nombre}|{inicio.isoformat()}"
+        faltan = (inicio - ahora).total_seconds() / 60
+        if clave not in ya_enviados and 0 <= faltan <= config.minutos_aviso:
+            avisos.append(Aviso("antes", m, h, clave))
+
+        if config.minutos_despues is None or m.nombre in registradas:
+            continue
+        clave = f"verificar|{m.nombre}|{inicio.isoformat()}"
+        pasados = (ahora - fin).total_seconds() / 60 - config.minutos_despues
+        if clave not in ya_enviados and 0 <= pasados <= VENTANA_VERIFICAR_MIN:
+            avisos.append(Aviso("verificar", m, h, clave))
+    return avisos
+
+
+def _leer_enviados(ruta: Path) -> set[str]:
+    if not ruta.exists():
+        return set()
+    hoy = date.today().isoformat()
+    # solo se conservan los de hoy, para que el archivo no crezca
+    return {l for l in ruta.read_text(encoding="utf-8").splitlines() if hoy in l}
+
+
+def _guardar_enviados(ruta: Path, enviados: set[str]) -> None:
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    ruta.write_text("\n".join(sorted(enviados)), encoding="utf-8")
+
+
 def cmd_recordar(config: Config, args) -> None:
-    """Queda corriendo y avisa N minutos antes de cada clase."""
-    avisadas: set[str] = set()
-    print(f"Recordatorios activos ({config.minutos_aviso} min antes). Ctrl+C para salir.")
+    """Avisa antes de cada clase (abriendo el link) y después si no registraste asistencia."""
+    enviados = _leer_enviados(AVISOS_ENVIADOS)
+    if not args.una_vez:
+        print(f"Recordatorios activos ({config.minutos_aviso} min antes). Ctrl+C para salir.")
     try:
         while True:
-            ahora = datetime.now()
-            for m, h in config.clases_de(ahora.date()):
-                hi, mi = parsear_hora(h.inicio)
-                inicio = ahora.replace(hour=hi, minute=mi, second=0, microsecond=0)
-                clave = f"{m.nombre}-{inicio.isoformat()}"
-                faltan = (inicio - ahora).total_seconds() / 60
-                if clave not in avisadas and 0 <= faltan <= config.minutos_aviso:
-                    avisadas.add(clave)
-                    notificar(m.nombre, f"Empieza a las {h.inicio}. ¡No olvides registrar tu asistencia!")
+            filas = leer_registro(args.registro)
+            for aviso in avisos_pendientes(config, datetime.now(), filas, enviados):
+                m, h = aviso.materia, aviso.horario
+                if aviso.tipo == "antes":
+                    notificar(m.nombre, f"Empieza a las {h.inicio}. ¡Marca tu asistencia!")
                     if m.link and config.abrir_link and not args.sin_link:
                         webbrowser.open(m.link)
+                else:
+                    notificar(
+                        f"¿Marcaste en {m.nombre}?",
+                        f'No hay registro de hoy. Si fuiste, márcalo: python asistencia.py marcar "{m.nombre}"',
+                    )
+                enviados.add(aviso.clave)
+                _guardar_enviados(AVISOS_ENVIADOS, enviados)
             if args.una_vez:
                 break
             time.sleep(30)
     except KeyboardInterrupt:
         print("\nRecordatorios detenidos.")
+
+
+def clase_actual_o_siguiente(config: Config, ahora: datetime) -> tuple[Materia, Horario] | None:
+    """La clase en curso; si no hay, la próxima de hoy; si no, la última que terminó hoy."""
+    clases = config.clases_de(ahora.date())
+    hora = ahora.strftime("%H:%M")
+    for m, h in clases:
+        if h.inicio <= hora <= h.fin:
+            return m, h
+    siguientes = [(m, h) for m, h in clases if h.inicio > hora]
+    if siguientes:
+        return siguientes[0]
+    return clases[-1] if clases else None
+
+
+def cmd_abrir(config: Config, args) -> None:
+    if args.materia:
+        materia = config.buscar_materia(args.materia)
+    else:
+        par = clase_actual_o_siguiente(config, datetime.now())
+        if not par:
+            raise SystemExit("Hoy no tienes clases.")
+        materia = par[0]
+    if not materia.link:
+        raise SystemExit(f"{materia.nombre} no tiene 'link' en config.json.")
+    print(f"Abriendo asistencia de {materia.nombre}: {materia.link}")
+    webbrowser.open(materia.link)
+
+
+def generar_pagina(config: Config) -> str:
+    """Página HTML para el celular: un botón por materia y la clase actual destacada."""
+    import html as _html
+
+    datos = [
+        {
+            "nombre": m.nombre,
+            "link": m.link or "",
+            "aula": m.aula or "",
+            "horarios": [{"dia": h.dia, "inicio": h.inicio, "fin": h.fin} for h in m.horarios],
+        }
+        for m in config.materias
+    ]
+    plantilla = (RAIZ / "plantillas" / "pagina.html").read_text(encoding="utf-8")
+    return plantilla.replace("__DATOS__", json.dumps(datos, ensure_ascii=False).replace("</", "<\\/")).replace(
+        "__TITULO__", _html.escape("Mi asistencia")
+    )
+
+
+def cmd_pagina(config: Config, args) -> None:
+    args.salida.write_text(generar_pagina(config), encoding="utf-8")
+    print(f"✔ Página creada en {args.salida}. Pásala a tu celular y agrégala a la pantalla de inicio.")
 
 
 def cmd_exportar_ics(config: Config, args) -> None:
@@ -476,6 +595,14 @@ def construir_parser() -> argparse.ArgumentParser:
     s.add_argument("--sin-link", action="store_true", help="no abrir el navegador")
     s.add_argument("--una-vez", action="store_true", help="revisa una sola vez (útil con cron)")
     s.set_defaults(func=cmd_recordar)
+
+    s = sub.add_parser("abrir", help="abre el link de asistencia (de la clase actual si no indicas materia)")
+    s.add_argument("materia", nargs="?")
+    s.set_defaults(func=cmd_abrir)
+
+    s = sub.add_parser("pagina", help="crea una página para el celular con botones de asistencia")
+    s.add_argument("-o", "--salida", type=Path, default=Path("asistencia.html"))
+    s.set_defaults(func=cmd_pagina)
 
     s = sub.add_parser("exportar-ics", help="crea un calendario .ics con alarmas")
     s.add_argument("--desde", type=date.fromisoformat)

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Asistencia">
+<title>__TITULO__</title>
+<style>
+  :root { --bg:#f5f6f8; --card:#fff; --txt:#1c1f24; --sub:#6b7280; --acento:#2563eb; --ahora:#16a34a; --borde:#e5e7eb; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#111317; --card:#1b1e24; --txt:#eef0f3; --sub:#9aa1ad; --acento:#60a5fa; --ahora:#4ade80; --borde:#2a2e36; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--txt); padding:20px 16px 40px; }
+  h1 { font-size:1.4rem; margin:0 0 4px; }
+  #fecha { color:var(--sub); margin:0 0 20px; }
+  .clase { display:block; text-decoration:none; color:inherit; background:var(--card); border:1px solid var(--borde);
+           border-radius:14px; padding:16px; margin-bottom:12px; }
+  .clase.ahora { border:2px solid var(--ahora); }
+  .clase.sin-link { opacity:.6; }
+  .fila { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+  .nombre { font-weight:600; font-size:1.05rem; }
+  .info { color:var(--sub); font-size:.9rem; margin-top:4px; }
+  .boton { background:var(--acento); color:#fff; border-radius:10px; padding:10px 14px; font-weight:600; white-space:nowrap; }
+  .ahora .boton { background:var(--ahora); color:#06210f; }
+  .etiqueta { font-size:.75rem; font-weight:700; color:var(--ahora); text-transform:uppercase; letter-spacing:.04em; }
+  h2 { font-size:1rem; color:var(--sub); margin:28px 0 12px; font-weight:600; }
+  .vacio { color:var(--sub); }
+</style>
+</head>
+<body>
+<h1>Mi asistencia</h1>
+<p id="fecha"></p>
+<div id="hoy"></div>
+<h2>Todas las materias</h2>
+<div id="todas"></div>
+<script>
+const MATERIAS = __DATOS__;
+const DIAS = ["lunes","martes","miércoles","jueves","viernes","sábado","domingo"];
+
+function tarjeta(m, h, ahora) {
+  const a = document.createElement(m.link ? "a" : "div");
+  a.className = "clase" + (ahora ? " ahora" : "") + (m.link ? "" : " sin-link");
+  if (m.link) { a.href = m.link; a.target = "_blank"; a.rel = "noopener"; }
+  const info = [h ? `${h.inicio}–${h.fin}` : m.horarios.map(x => `${DIAS[x.dia].slice(0,3)} ${x.inicio}`).join(" · "), m.aula]
+    .filter(Boolean).join(" · ");
+  a.innerHTML = `<div class="fila"><div>${ahora ? '<div class="etiqueta">Ahora</div>' : ""}
+      <div class="nombre"></div><div class="info"></div></div>
+      ${m.link ? '<span class="boton">Marcar</span>' : ""}</div>`;
+  a.querySelector(".nombre").textContent = m.nombre;
+  a.querySelector(".info").textContent = info + (m.link ? "" : " · sin link");
+  return a;
+}
+
+function render() {
+  const d = new Date();
+  const dia = (d.getDay() + 6) % 7; // 0 = lunes
+  const hora = d.toTimeString().slice(0, 5);
+  document.getElementById("fecha").textContent =
+    d.toLocaleDateString("es", { weekday: "long", day: "numeric", month: "long" });
+
+  const hoy = MATERIAS.flatMap(m => m.horarios.filter(h => h.dia === dia).map(h => ({ m, h })))
+    .sort((x, y) => x.h.inicio.localeCompare(y.h.inicio));
+  const cont = document.getElementById("hoy");
+  cont.replaceChildren();
+  if (!hoy.length) cont.innerHTML = '<p class="vacio">Hoy no tienes clases.</p>';
+  for (const { m, h } of hoy) {
+    // "ahora": desde 15 min antes hasta el fin de la clase
+    const [hh, mm] = h.inicio.split(":").map(Number);
+    const antes = new Date(d); antes.setHours(hh, mm - 15, 0, 0);
+    const enCurso = d >= antes && hora <= h.fin;
+    cont.appendChild(tarjeta(m, h, enCurso));
+  }
+  const todas = document.getElementById("todas");
+  todas.replaceChildren(...MATERIAS.map(m => tarjeta(m, null, false)));
+}
+render();
+setInterval(render, 60000);
+</script>
+</body>
+</html>
