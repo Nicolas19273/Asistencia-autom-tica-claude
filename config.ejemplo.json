@@ -1,0 +1,40 @@
+{
+  "asistencia_minima": 75,
+  "semestre": {
+    "inicio": "2026-08-10",
+    "fin": "2026-12-04",
+    "feriados": ["2026-09-18", "2026-09-19", "2026-10-12", "2026-11-02"]
+  },
+  "recordatorios": {
+    "minutos_antes": 10,
+    "abrir_link": true
+  },
+  "materias": [
+    {
+      "nombre": "Cálculo II",
+      "aula": "Edificio B - Sala 204",
+      "asistencia_minima": 80,
+      "horarios": [
+        { "dia": "lunes", "inicio": "08:30", "fin": "10:00" },
+        { "dia": "miércoles", "inicio": "08:30", "fin": "10:00" }
+      ]
+    },
+    {
+      "nombre": "Programación",
+      "aula": "Laboratorio 3",
+      "link": "https://campus.ejemplo.edu/asistencia/programacion",
+      "horarios": [
+        { "dia": "martes", "inicio": "10:15", "fin": "11:45" },
+        { "dia": "jueves", "inicio": "10:15", "fin": "11:45" }
+      ]
+    },
+    {
+      "nombre": "Inglés",
+      "clases_totales": 16,
+      "tarde_cuenta_como": "ausente",
+      "horarios": [
+        { "dia": "viernes", "inicio": "14:00", "fin": "15:30" }
+      ]
+    }
+  ]
+}

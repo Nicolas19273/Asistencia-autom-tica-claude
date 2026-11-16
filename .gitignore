@@ -1,0 +1,8 @@
+# Tu configuración y registro personales
+config.json
+data/*.csv
+*.ics
+
+__pycache__/
+*.pyc
+.venv/
